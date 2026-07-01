@@ -11,14 +11,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install system dependencies if needed, clean up apt cache
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/list/apt/lists/*
 
-COPY requirements.txt .
+# CHANGE THIS LINE BELOW TO COPY THE BACKEND FILE:
+COPY requirements-backend.txt ./requirements.txt
 
-# Install CPU-optimized torch and clear pip cache to save space
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
