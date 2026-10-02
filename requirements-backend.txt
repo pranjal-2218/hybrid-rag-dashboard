@@ -5,3 +5,5 @@ fastapi
 uvicorn
 numpy
 pypdf
+transformers
+google-genai

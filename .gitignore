@@ -1,0 +1,18 @@
+# Environment Variables
+.env
+
+# Database
+hybridrag.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+
+# OS Files
+.DS_Store

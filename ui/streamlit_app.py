@@ -116,7 +116,7 @@ st.markdown(
 # API Engine endpoints configurations
 import os
 
-RENDER_BACKEND_URL = "https://hybrid-rag-backend.onrender.com"
+RENDER_BACKEND_URL = "https://hybrid-rag-dashboard.onrender.com"
 
 if os.environ.get("AM_I_IN_A_DOCKER_CONTAINER") or os.path.exists('/.dockerenv'):
     BACKEND_BASE_URL = "http://backend:8000"
@@ -259,13 +259,21 @@ if run_search or query_str:
                 )
                 
                 if response.status_code == 200:
-                    results = response.json().get("results", [])
+                    data = response.json()
+                    results = data.get("results", [])
+                    answer = data.get("answer", "")
                     elapsed = time.perf_counter() - start_search_time
                     
                     if not results:
                         st.info("ℹ️ No matching chunks found. Try indexing a document first or adjusting your query.")
                     else:
                         st.markdown(f"**Retrieved {len(results)} chunks in {elapsed:.4f} seconds:**")
+                        
+                        if answer:
+                            st.markdown("### 💡 AI Synthesized Answer")
+                            st.info(answer)
+                            
+                        st.markdown("### 📚 Source Documents")
                         
                         for idx, item in enumerate(results, start=1):
                             # HTML injection for custom styled cards

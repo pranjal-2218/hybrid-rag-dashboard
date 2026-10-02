@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import re
+import heapq
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -182,9 +183,8 @@ class InMemoryDocumentStore:
                 if score > 0:
                     scores[cid] = score
             
-            # Sort descending
-            sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-            return sorted_scores[:top_k]
+            # Sort descending using heapq for efficiency
+            return heapq.nlargest(top_k, scores.items(), key=lambda x: x[1])
 
     def dense_search(self, query_emb: np.ndarray, top_k: int) -> List[Tuple[str, float]]:
         """Computes Cosine Similarity using vectorized NumPy operations."""
@@ -199,8 +199,7 @@ class InMemoryDocumentStore:
             similarities = np.dot(emb_matrix, query_emb)
             
             results = [(cid, float(sim)) for cid, sim in zip(chunk_ids, similarities)]
-            results.sort(key=lambda x: x[1], reverse=True)
-            return results[:top_k]
+            return heapq.nlargest(top_k, results, key=lambda x: x[1])
 
     def hybrid_search(self, query: str, query_emb: np.ndarray, top_k: int) -> List[Dict]:
         """Fuses sparse and dense rankings using Reciprocal Rank Fusion (RRF)."""
@@ -226,17 +225,13 @@ class InMemoryDocumentStore:
                 score += 1.0 / (60.0 + dense_ranks[cid])
             rrf_scores[cid] = score
             
-        sorted_candidates = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+        top_candidates = heapq.nlargest(top_k, rrf_scores.items(), key=lambda x: x[1])
         
         # Map back to structural context
         results: List[Dict] = []
-        RRF_THRESHOLD = 0.018  # Filter out low-confidence "garbage" results
         
         with self.lock:
-            for cid, rrf_score in sorted_candidates[:top_k]:
-                if rrf_score < RRF_THRESHOLD:
-                    continue  # Drop low-scoring chunks entirely
-                    
+            for cid, rrf_score in top_candidates:
                 chunk_info = self.chunks.get(cid)
                 if chunk_info:
                     results.append({

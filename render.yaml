@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: hybrid-rag-backend
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    healthCheckPath: /docs
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false # You will input this in the Render dashboard
+
+  - type: web
+    name: hybrid-rag-frontend
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "streamlit run ui/streamlit_app.py --server.port $PORT --server.address 0.0.0.0"
+    plan: free
+    envVars:
+      - key: STREAMLIT_RUNTIME_ENVIRONMENT
+        value: "cloud"

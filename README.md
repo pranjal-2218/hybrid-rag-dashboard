@@ -67,12 +67,11 @@ graph TD
 
 ## 🚦 How to Run the Application
 
-Always execute commands from the **project root directory** (`/Users/pranjal/machine_learning/rag`).
-
+Always execute commands from the **project root directory** 
 ### 1. Environment Activation
 Activate your pre-configured local Python virtual environment:
 ```bash
-source venv_py39/bin/activate
+source venv/bin/activate
 ```
 
 ### 2. Launch the FastAPI Backend Engine
