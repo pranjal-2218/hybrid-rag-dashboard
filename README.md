@@ -1,118 +1,91 @@
 # ⚡ Advanced Hybrid RAG Engine
 
-A production-grade, local, hybrid retrieval system combining **Dense Semantic Search** (vectors via transformer models) and **Sparse Lexical Search** (exact matching via BM25), fused together using **Reciprocal Rank Fusion (RRF)**. 
+A production-grade hybrid retrieval and generation system combining **Dense Semantic Search** (vectors via transformer models) and **Sparse Lexical Search** (exact matching via BM25), fused together using **Reciprocal Rank Fusion (RRF)**, and refined with a **Cross-Encoder Reranker**. 
 
-The application features a high-performance **FastAPI backend** (orchestrating model inference and vector mathematics) and a premium, responsive **Streamlit frontend dashboard** (supporting multi-format file uploads, PDF ingestion, raw text extraction, and granular search control).
+The application features a modular **FastAPI backend** (orchestrating model inference, vector mathematics, and LLM synthesis) and a premium, responsive **Streamlit frontend dashboard** (supporting multi-format file uploads, text extraction, and synthesized answers).
 
 ---
 
 ## 🚀 Key Features
 
-* **⚡ Zero-Cold-Start RRF**: Merges sparse and dense search results using Reciprocal Rank Fusion, with a low-confidence threshold filter ($0.018$) to eliminate noise.
-* **📂 Hybrid Ingestion Console**: Supports uploading `.txt` and `.pdf` files (with automatic text extraction via `pypdf`) alongside raw text input.
-* **🧠 High-Performance Local Embeddings**: Embeddings are generated using the `sentence-transformers/all-MiniLM-L6-v2` transformer model running locally on the CPU (wrapped in FastAPI's loop executors for non-blocking concurrent requests).
-* **🔒 Thread-Safe InMemory Document Store**: Employs fine-grained concurrent locking for high-speed indexing and querying.
+* **⚡ Zero-Cold-Start RRF**: Merges sparse and dense search results using Reciprocal Rank Fusion, maximizing recall across both lexical and semantic boundaries.
+* **🎯 Cross-Encoder Reranking**: Passes the top RRF candidates through a lightweight `ms-marco-MiniLM-L-6-v2` cross-encoder to precisely filter out irrelevant context.
+* **🤖 LLM Synthesis**: Integrates external Generative AI (like Gemini 2.5 Flash) to synthesize human-readable answers directly from the strictly retrieved context.
+* **📂 Hybrid Ingestion Console**: Supports uploading `.txt` and `.pdf` files alongside raw text input.
+* **🧠 High-Performance Local Embeddings**: Embeddings are generated using the `all-MiniLM-L6-v2` transformer model locally (wrapped in FastAPI's loop executors for non-blocking concurrent requests).
+* **🗄️ SQLite Persistence**: Uses a disk-backed SQLite datastore (`src/hybridrag/store/db.py`) for maintaining document and chunk states persistently.
+* **⚡ Custom LRU Cache**: Implements a hand-written Hash Map + Doubly Linked List LRU cache to instantly return repeated identical queries.
 
 ---
 
 ## 🏗️ Architecture Overview
 
-The system architecture is structured as follows:
+The system architecture is strictly modularized within the `src/hybridrag/` directory:
 
 ```mermaid
 graph TD
-    User([User]) -->|Interacts| Streamlit[Streamlit Frontend]
-    
-    subgraph Frontend [Streamlit UI]
-        Streamlit -->|Ingests File/Text| IngestUI[Ingestion Form]
-        Streamlit -->|Queries| SearchUI[Search Bar & Slider]
-    end
+    User([User]) -->|Interacts| Streamlit[Streamlit UI]
     
     subgraph Backend [FastAPI Server]
-        IngestUI -->|POST /ingest| FastAPIIngest[Ingest Endpoint]
-        SearchUI -->|POST /query| FastAPIQuery[Query Endpoint]
+        Streamlit -->|POST /ingest| FastAPIIngest[Ingest Endpoint]
+        Streamlit -->|POST /query| FastAPIQuery[Query Endpoint]
         
-        FastAPIIngest -->|1. Sliding Window Chunker| Chunker[Multilingual Chunker]
-        Chunker -->|2. Encode Vectors| Model[all-MiniLM-L6-v2 Model]
-        Model -->|3. Register Chunks & Embeddings| Store[(In-Memory Document Store)]
+        FastAPIIngest --> Chunker[Sliding Window Chunker]
+        Chunker --> Model[Embedding Model]
+        Model --> Store[(SQLite DB)]
         
-        FastAPIQuery -->|1. Encode Query| Model
-        FastAPIQuery -->|2. Search| Store
-        Store -->|Sparse Search| BM25[BM25 Engine]
-        Store -->|Dense Search| CosSim[NumPy Cosine Similarity]
-        BM25 -->|Merge ranks| RRF[Reciprocal Rank Fusion]
-        CosSim -->|Merge ranks| RRF
-        RRF -->|3. Threshold & Slice| FilteredResults[Top K Results]
+        FastAPIQuery --> LRU[LRU Cache]
+        LRU -.->|Cache Miss| Store
+        Store --> BM25[Custom BM25 Engine]
+        Store --> Dense[Dense NumPy Matrix]
+        BM25 --> RRF[Reciprocal Rank Fusion]
+        Dense --> RRF
+        RRF --> Reranker[Cross-Encoder Reranker]
+        Reranker --> Generator[LLM Generator]
     end
     
-    FilteredResults -->|JSON Response| Streamlit
+    Generator -->|Synthesized JSON Response| Streamlit
 ```
-
-### 1. Ingestion Pipeline
-* **File Upload / Extraction**: Supports `.txt` files directly and `.pdf` files parsed via `pypdf`.
-* **Sliding Window Chunker**: Splits text into character-level sliding windows (default size `600` chars with an overlap of `200` chars) to preserve local context and remain language-agnostic (essential for multilingual support like CJK characters).
-* **Dense Embedding Generation**: Runs `sentence-transformers/all-MiniLM-L6-v2` locally to output $384$-dimensional embeddings. The process runs asynchronously inside Python's executor thread pool to avoid blocking FastAPI's event loop.
-* **Sparse Metadata Generation**: Tokenizes text and counts word frequencies to update the global collection and document frequency counters.
-
-### 2. Retrieval Engine (`InMemoryDocumentStore`)
-* **Thread Safety**: Reads and writes are guarded by a Python `threading.Lock` to support concurrent user sessions.
-* **Sparse Search (BM25)**: Evaluates term importance based on local term frequency (TF) and inverse document frequency (IDF) with adjustments for average document length.
-* **Dense Search**: Calculates Cosine Similarity between the query vector and all chunk vectors using high-performance vector operations via NumPy.
-* **Reciprocal Rank Fusion (RRF)**: Merges sparse and dense ranking results. The RRF formula scoring a chunk $d$ is:
-  $$RRF(d) = \sum_{m \in M} \frac{1}{60 + r_m(d)}$$
-  where $M$ represents the search engines (lexical and vector), and $r_m(d)$ is the rank of chunk $d$ in engine $m$.
-* **Trash/Garbage Thresholding**: Discards low-confidence results below a threshold ($0.018$) to prevent unrelated content from cluttering the context output.
 
 ---
 
-## 🚦 How to Run the Application
+## 🚦 How to Run the Application (Locally)
 
-Always execute commands from the **project root directory** 
-### 1. Environment Activation
-Activate your pre-configured local Python virtual environment:
+Always execute commands from the **project root directory**. You can easily spin up the entire application stack using Docker Compose.
+
+### 1. Configure Secrets
+Create a `.env` file in the root directory (make sure it's in `.gitignore`!) and add your API keys:
 ```bash
-source venv/bin/activate
+GEMINI_API_KEY=your_api_key_here
 ```
 
-### 2. Launch the FastAPI Backend Engine
-Start the high-performance retrieval engine on its designated port:
+### 2. Launch via Docker Compose
 ```bash
-uvicorn backend:app --reload --port 8000
+docker-compose up --build
 ```
-* **Host Gateway**: [http://localhost:8000](http://localhost:8000)
-* **Architecture Note**: On the initial bootstrap, the engine safely streams and caches the `all-MiniLM-L6-v2` transformer architecture locally from Hugging Face. Subsequent initializations skip network overhead and load instantly from local disk storage.
-
-### 3. Launch the Streamlit Frontend Dashboard
-In a secondary terminal window (with the virtual environment activated), spin up the user interface layer:
-```bash
-streamlit run frontend.py --server.port 8501
-```
-* **UI Interface**: [http://localhost:8501](http://localhost:8501)
-* **Hot-Reloading**: The Streamlit event loop natively monitors `frontend.py` state changes, dynamically rendering codebase updates in real-time without requiring manual service restarts.
+This will automatically:
+1. Build the shared Python environment.
+2. Spin up the FastAPI backend on `http://localhost:8000`.
+3. Spin up the Streamlit frontend on `http://localhost:8501`.
 
 ---
 
-## 🐳 Docker Deployment
+## ☁️ Cloud Deployment (Render)
 
-The application is fully containerized and can be run in isolated environments.
+This repository includes a `render.yaml` Blueprint file for seamless 1-click deployments to Render.
 
-1. **Build the Docker Image**:
-   ```bash
-   docker build -t hybrid-rag-app .
-   ```
-
-2. **Run the Container**:
-   ```bash
-   docker run -p 8000:8000 hybrid-rag-app
-   ```
-   *(Note: This executes the backend server. To run the frontend in Docker, adjust the port configurations and entrypoints accordingly).*
+1. Connect your GitHub repository to Render.
+2. Select **Blueprint** and point it to this repo.
+3. Render will instantly spin up `hybrid-rag-backend` and `hybrid-rag-frontend`.
+4. Add your `GEMINI_API_KEY` to the Environment Variables of the backend service.
+5. Provide the deployed backend URL to the frontend via the `RENDER_BACKEND_URL` variable.
 
 ---
 
-## 🛠️ Tech Stack & Key Dependencies
+## 🛠️ Testing & Benchmarks
 
-* **FastAPI**: Lightweight, asynchronous web framework for API development.
-* **Streamlit**: Fast prototyping framework for building modern UI dashboard apps.
-* **SentenceTransformers**: Python framework for state-of-the-art sentence, text, and image embeddings.
-* **NumPy**: Linear algebra and vector operations for dense calculations.
-* **pypdf**: Lightweight, zero-dependency PDF document parsing library.
+The project includes an evaluation suite and latency benchmarks.
+* **Run Unit Tests**: `pytest tests/`
+* **Run Benchmarks**: `python benchmarks/latency_bench.py`
+
+Continuous Integration (CI) is configured via GitHub Actions in `.github/workflows/ci.yml`.
