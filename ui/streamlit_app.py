@@ -116,14 +116,14 @@ st.markdown(
 # API Engine endpoints configurations
 import os
 
-RENDER_BACKEND_URL = "https://hybrid-rag-dashboard.onrender.com"
+# Allow the user to define the exact backend URL in Render Dashboard
+BACKEND_BASE_URL = os.environ.get("BACKEND_URL")
 
-if os.environ.get("AM_I_IN_A_DOCKER_CONTAINER") or os.path.exists('/.dockerenv'):
-    BACKEND_BASE_URL = "http://backend:8000"
-elif os.environ.get("STREAMLIT_RUNTIME_ENVIRONMENT") == "cloud":
-    BACKEND_BASE_URL = RENDER_BACKEND_URL
-else:
-    BACKEND_BASE_URL = "http://localhost:8000"
+if not BACKEND_BASE_URL:
+    if os.environ.get("AM_I_IN_A_DOCKER_CONTAINER") or os.path.exists('/.dockerenv'):
+        BACKEND_BASE_URL = "http://backend:8000"
+    else:
+        BACKEND_BASE_URL = "http://localhost:8000"
 
 INGEST_URL = f"{BACKEND_BASE_URL}/ingest"
 QUERY_URL = f"{BACKEND_BASE_URL}/query"
@@ -295,9 +295,12 @@ if run_search or query_str:
                                 unsafe_allow_html=True
                             )
                 else:
-                    error_detail = response.json().get("detail", "Unknown error occurred.")
+                    try:
+                        error_detail = response.json().get("detail", "Unknown error occurred.")
+                    except:
+                        error_detail = f"Server returned status {response.status_code}. Is the Backend URL correct?"
                     st.error(f"❌ Query Failed: {error_detail}")
             except requests.exceptions.ConnectionError:
-                st.error("⚠️ Connection Error: Is the FastAPI backend running on port 8000?")
+                st.error(f"⚠️ Connection Error: Could not connect to {BACKEND_BASE_URL}. Please check your BACKEND_URL environment variable.")
             except Exception as e:
                 st.error(f"⚠️ Search Query Failed: {str(e)}")

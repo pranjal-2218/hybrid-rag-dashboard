@@ -16,5 +16,8 @@ services:
     startCommand: "streamlit run ui/streamlit_app.py --server.port $PORT --server.address 0.0.0.0"
     plan: free
     envVars:
-      - key: STREAMLIT_RUNTIME_ENVIRONMENT
-        value: "cloud"
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: hybrid-rag-backend
+          envVarKey: RENDER_EXTERNAL_URL
