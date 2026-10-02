@@ -120,7 +120,9 @@ import os
 BACKEND_BASE_URL = os.environ.get("BACKEND_URL")
 
 if not BACKEND_BASE_URL:
-    if os.environ.get("AM_I_IN_A_DOCKER_CONTAINER") or os.path.exists('/.dockerenv'):
+    if os.environ.get("STREAMLIT_RUNTIME_ENVIRONMENT") == "cloud":
+        BACKEND_BASE_URL = "https://hybrid-rag-backend-oie0.onrender.com"
+    elif os.environ.get("AM_I_IN_A_DOCKER_CONTAINER") or os.path.exists('/.dockerenv'):
         BACKEND_BASE_URL = "http://backend:8000"
     else:
         BACKEND_BASE_URL = "http://localhost:8000"
