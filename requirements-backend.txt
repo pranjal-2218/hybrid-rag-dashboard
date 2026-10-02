@@ -3,7 +3,7 @@ torch==2.2.1+cpu
 sentence-transformers==2.5.1
 fastapi
 uvicorn
-numpy
+numpy<2.0.0
 pypdf
 transformers
 google-genai
